@@ -20,7 +20,38 @@
 
 # COMMAND ----------
 
-# Gather file meta from all files in current_path and below
+# MAGIC %fs ls 
+# MAGIC s3a://databricks-corp-training/common
+
+# COMMAND ----------
+
+database_name = 'dba_helper'
+spark.sql(F"CREATE DATABASE IF NOT EXISTS {database_name}")
+
+# COMMAND ----------
+
+from pyspark.sql.utils import AnalysisException
+def table_detail_func(row) -> None:
+  """Capture DESCRIBE DETAIL metadata"""
+  if row['isTemporary'] != 'true':
+    try:
+      (spark.sql(F"DESCRIBE DETAIL {row['database']}.{row['tableName']}")
+              .write.format('delta')
+              .mode('append').option('mergeSchema','true')
+              .saveAsTable("dba_helper.table_details"))
+    except AnalysisException as ae:
+      print(ae)
+
+run_parallel(table_detail_func, "show tables in default")
+
+# COMMAND ----------
+
+# MAGIC %md # Catalog your data
+# MAGIC - Make it ready for volumetric analysis
+
+# COMMAND ----------
+
+# Gather file metadata from all files under current_path
 def catalog(current_path:str):
   return (spark.read.format("binaryFile")
         .option("recursiveFileLookup", "true")
@@ -28,32 +59,12 @@ def catalog(current_path:str):
         .load(current_path)
         .drop('content'))
        
-df = catalog('s3://bucket/data/raw')
-
-
-# COMMAND ----------
-
-database_name = 'information_schema'
-spark.sql(F"CREATE DATABASE IF NOT EXISTS {database_name}")
+df = catalog('s3a://databricks-corp-training/common/')
+display(df)
 
 # COMMAND ----------
 
-
-from pyspark.sql.utils import AnalysisException
-def table_detail_func(row) -> None:
-  """Capture DESCRIBE DETAIL metadata"""
-  print(row)
-  if row['isTemporary'] != 'true':
-    try:
-      (spark.sql(F"DESCRIBE DETAIL {row['database']}.{row['tableName']}")
-              .write.format('delta')
-              .mode('append').option('mergeSchema','true')
-              .saveAsTable(F"{database_name}.table_details"))
-    except AnalysisException as ae:
-      print(ae)
-
-
-run_parallel(table_detail_func, "show tables in default")
+display(df)
 
 # COMMAND ----------
 
